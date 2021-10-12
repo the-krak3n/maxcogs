@@ -1,9 +1,23 @@
 import logging
 
 import discord
-from dislash.application_commands._modifications.old import send_with_components
-from dislash.interactions import ActionRow, Button, ButtonStyle
 from redbot.core import Config, commands
+from redbot.core.errors import CogLoadError
+
+try:
+    from dislash.application_commands._modifications.old import send_with_components
+    from dislash.interactions import ActionRow, Button, ButtonStyle
+except Exception as e:
+    raise CogLoadError(
+        f"Can't load because: {e}\n"
+        "Please install dislash by using "
+        "`pip install dislash.py==1.4.9` "
+        "in your console. "
+        "Restart your bot if you still get this error."
+    )
+
+# CogLoadError handler from
+# https://github.com/fixator10/Fixator10-Cogs/blob/9972aa58dea3a5a1a0758bca62cb8a08a7a51cc6/leveler/def_imgen_utils.py#L11-L30
 
 log = logging.getLogger("red.maxcogs.advancedinvite")
 
@@ -12,7 +26,7 @@ class AdvancedInvite(commands.Cog):
     """Shows [botname]'s invite link."""
 
     __author__ = "MAX"
-    __version__ = "0.0.14 beta"
+    __version__ = "0.0.16 beta"
 
     def format_help_for_context(self, ctx: commands.Context) -> str:
         """Thanks Sinbad!"""
@@ -25,13 +39,12 @@ class AdvancedInvite(commands.Cog):
 
     def __init__(self, bot):
         self.bot = bot
-        # monkeypatch dislash.py
+        # monkeypatch dislash.py to not break slashtags by phen.
         if not hasattr(commands.Context, "sendi"):
             commands.Context.sendi = send_with_components
         self.config = Config.get_conf(self, identifier=12435434124)
         self.config.register_global(
             invite_default="Thank you for inviting {}\n**Invite:**\n[Click here]({})",
-            emoji=None,
         )
 
     def cog_unload(self):
@@ -52,7 +65,7 @@ class AdvancedInvite(commands.Cog):
         You can generate permission level here: https://discordapi.com/permissions.html."""
 
     @settings.command(name="set", aliases=["add", "message"], usage="<message>")
-    async def settings_add(self, ctx, *, message: str):
+    async def settings_set(self, ctx, *, message: str):
         """Change the description message for your invite.
 
         Leave it blank will reset the message back to default.
@@ -70,31 +83,6 @@ class AdvancedInvite(commands.Cog):
             await self.config.invite_default.set(message)
             await ctx.send(
                 f"\N{WHITE HEAVY CHECK MARK} Sucessfully set the description message to `{message}`."
-            )
-
-    @settings.command(name="emoji", usage="<emoji>")
-    async def settings_emoji(self, ctx, *, emoji: str = None):
-        """Set a emoji on the button beside "Invite me".
-
-        Leave it blank will reset the emoji back to default.
-        You need to set an vaild emoji, either way your `[p]invite` will not work.
-
-        **Example:**
-        - `[p]invite emoji :smiley:`.
-
-        **Arguments:**
-        - `<emoji>` is the emoji you want to set as an emoji.
-        """
-
-        if not emoji:
-            await self.config.emoji.set(emoji)
-            await ctx.send(
-                "\N{WHITE HEAVY CHECK MARK} Sucessfully reset back to default."
-            )
-        else:
-            await self.config.emoji.set(emoji)
-            await ctx.send(
-                f"\N{WHITE HEAVY CHECK MARK} Sucessfully set your emoji to {emoji}."
             )
 
     @settings.command(name="reset", aliases=["remove"])
@@ -115,8 +103,9 @@ class AdvancedInvite(commands.Cog):
 
         if author.is_on_mobile():
             # This will only send if user is on mobile.
-            return await ctx.send(
-                f"Here's the bot invite for {self.bot.user.name}:\n{invite}"
+            return await ctx.reply(
+                f"Here's the bot invite for {self.bot.user.name}:\n{invite}",
+                mention_author=False,
             )
 
         name = ctx.bot.user.name
@@ -142,13 +131,11 @@ class AdvancedInvite(commands.Cog):
         )
         try:
             await ctx.sendi(embed=embed, components=[row])
-        except discord.HTTPException:
-            await ctx.send(
+        except discord.HTTPException as e:
+            await ctx.reply(
                 "Something went wrong while trying to post invite. Check your console for details."
             )
-            log.error(
-                f"Error in command 'invite'. I suggest checking if you set vaild emoji before reporting this '{ctx.clean_prefix}help settings emoji'."
-            )
+            log.error(f"Command 'invite' failed, This is because: {e}")
 
 
 def setup(bot):
